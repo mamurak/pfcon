@@ -52,7 +52,7 @@ Gd_internalvar  = {
         }
     },
     "swift": {
-        "auth_url":                 "http://swift_service:8080/auth/v1.0",
+        "auth_url":                 "http://swift:8080/auth/v1.0",
         "username":                 "chris:chris1234",
         "key":                      "testing",
         "container_name":           "users",
@@ -1668,13 +1668,13 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
         # For newer docker-compose
         try:
-            pman_service    = socket.gethostbyname('pman_service')
+            pman_service    = socket.gethostbyname('pman')
             if pman_service != "127.0.0.1":
                 str_defIPpman   = pman_service
         except:
             pass
         try:
-            pfioh_service   = socket.gethostbyname('pfioh_service')
+            pfioh_service   = socket.gethostbyname('pfioh')
             if pfioh_service != "127.0.0.1":
                 str_defIPpfioh  = pfioh_service
         except:
