@@ -1,6 +1,6 @@
 
 import logging
-logging.disable(logging.CRITICAL)
+#logging.disable(logging.CRITICAL)
 
 import  sys, os
 
@@ -16,6 +16,7 @@ import  ast
 import  datetime
 import  time
 import  pprint
+from traceback import format_exc
 
 import  threading
 import  platform
@@ -184,6 +185,7 @@ class StoreHandler(BaseHTTPRequestHandler):
         """
         Returns a form from cgi.FieldStorage
         """
+        self.dp.qprint(f'Calling FieldStorage with verb "{str_verb}" and data:\n{data}')
         return cgi.FieldStorage(
             IO(data),
             headers = self.headers,
@@ -1610,64 +1612,72 @@ class StoreHandler(BaseHTTPRequestHandler):
         :return:
         """
         b_threaded  = False
+        self.dp.qprint('Received POST request.')
 
-        # pudb.set_trace()
-        # Parse the form data posted
-        self.dp.qprint(str(self.headers), comms = 'rx')
-
-        length              = self.headers['content-length']
-        data                = self.rfile.read(int(length))
-        form                = self.form_get('POST', data)
-        d_form              = {}
-        d_ret               = {
-            'msg':      'In do_POST',
-            'status':   True,
-            'formsize': sys.getsizeof(form)
-        }
-
-        self.dp.qprint('data length = %d' % len(data),   comms = 'status')
-        self.dp.qprint('data: %s' % data, comms = 'status')
-        self.dp.qprint('form length = %d' % len(form), comms = 'status')
-
-        if len(form):
-            self.dp.qprint("Unpacking multi-part form message...", comms = 'status')
-            for key in form:
-                self.dp.qprint("\tUnpacking field '%s..." % key, comms = 'status')
-                d_form[key]     = form.getvalue(key)
-            d_msg               = json.loads((d_form['d_msg']))
-        else:
-            self.dp.qprint("Parsing JSON data...", comms = 'status')
-            d_data              = json.loads(data.decode())
-            d_msg               = d_data['payload']
-
-        self.dp.qprint('d_msg = %s' % self.pp.pformat(d_msg).strip(), comms = 'status')
-
-        if 'action' in d_msg:
+        try:
             # pudb.set_trace()
-            self.dp.qprint("verb: %s detected." % d_msg['action'], comms = 'status')
-            str_method      = '%s_process' % d_msg['action']
-            self.dp.qprint("method to call: %s(request = d_msg) " % str_method, comms = 'status')
-            try:
-                pf_method   = getattr(self, str_method)
-            except  AttributeError:
-                raise NotImplementedError("Class `{}` does not implement `{}`".format(self.__class__.__name__, pf_method))
+            # Parse the form data posted
+            self.dp.qprint(str(self.headers), comms = 'rx')
 
-            if 'threadAction' in d_msg:
-                b_threaded  = int(d_msg['threadAction'])
+            length              = self.headers['content-length']
+            data                = self.rfile.read(int(length))
+            form                = self.form_get('POST', data.decode())
+            d_form              = {}
+            d_ret               = {
+                'msg':      'In do_POST',
+                'status':   True,
+                'formsize': sys.getsizeof(form)
+            }
 
-            if not b_threaded:
-                d_done      = pf_method(request = d_msg)
-                self.dp.qprint(self.pp.pformat(d_done).strip(), comms = 'tx')
-                d_ret       = d_done
+            self.dp.qprint('data length = %d' % len(data),   comms = 'status')
+            self.dp.qprint('data: %s' % data, comms = 'status')
+            self.dp.qprint('form length = %d' % len(form), comms = 'status')
+            self.dp.qprint(f'form: {form}')
+
+            if len(form):
+                self.dp.qprint("Unpacking multi-part form message...", comms = 'status')
+                for key in form:
+                    self.dp.qprint("\tUnpacking field '%s..." % key, comms = 'status')
+                    d_form[key]     = form.getvalue(key)
+                self.dp.qprint(f'Reconstructed raw message: {d_form}')
+                d_msg               = json.loads((d_form['d_msg']))
             else:
-                t_process   = threading.Thread( target  = pf_method,
-                                                args    = (),
-                                                kwargs  = {'request': d_msg})
-                t_process.start()
-                time.sleep(0.1)
+                self.dp.qprint("Parsing JSON data...", comms = 'status')
+                d_data              = json.loads(data)
+                d_msg               = d_data['payload']
 
-        self.ret_client(d_ret)
-        return d_ret
+            self.dp.qprint('d_msg = %s' % self.pp.pformat(d_msg).strip(), comms = 'status')
+
+            if 'action' in d_msg:
+                # pudb.set_trace()
+                self.dp.qprint("verb: %s detected." % d_msg['action'], comms = 'status')
+                str_method      = '%s_process' % d_msg['action']
+                self.dp.qprint("method to call: %s(request = d_msg) " % str_method, comms = 'status')
+                try:
+                    pf_method   = getattr(self, str_method)
+                except  AttributeError:
+                    raise NotImplementedError("Class `{}` does not implement `{}`".format(self.__class__.__name__, pf_method))
+
+                if 'threadAction' in d_msg:
+                    b_threaded  = int(d_msg['threadAction'])
+
+                if not b_threaded:
+                    d_done      = pf_method(request = d_msg)
+                    self.dp.qprint(self.pp.pformat(d_done).strip(), comms = 'tx')
+                    d_ret       = d_done
+                else:
+                    t_process   = threading.Thread( target  = pf_method,
+                                                    args    = (),
+                                                    kwargs  = {'request': d_msg})
+                    t_process.start()
+                    time.sleep(0.1)
+
+            self.ret_client(d_ret)
+            return d_ret
+        except:
+            self.dp.qprint(f'Request failed: {format_exc()}')
+
+
 
     def do_POST_serverctl(self, d_meta):
         """
